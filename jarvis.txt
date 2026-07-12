@@ -1,4 +1,0 @@
-flask
-anthropic
-requests
-gunicorn
