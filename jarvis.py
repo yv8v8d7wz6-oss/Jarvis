@@ -176,7 +176,7 @@ def run_jarvis(user_message: str) -> str:
 
 @app.route("/")
 def index():
-    return send_from_directory(BASE_DIR, "jarvis-hud.html")
+    return send_from_directory(BASE_DIR, "jarvis.html")
 
 
 @app.route("/api/chat", methods=["POST"])
