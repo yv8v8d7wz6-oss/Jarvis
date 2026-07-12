@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Jarvis HUD</title>
+<style>
+  :root {
+    --bg: #050b12;
+    --grid: rgba(90, 200, 230, 0.07);
+    --cyan-dim: #1c5a68;
+    --cyan: #4fd8ec;
+    --cyan-bright: #baf3ff;
+    --amber: #ffb545;
+    --text-dim: #6fa8b5;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  /* blueprint grid backdrop */
+  .grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(circle at center, black 0%, transparent 75%);
+  }
+
+  .scanline {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(79, 216, 236, 0.02) 0px,
+      rgba(79, 216, 236, 0.02) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    pointer-events: none;
+  }
+
+  .stage {
+    position: relative;
+    width: min(72vmin, 640px);
+    height: min(72vmin, 640px);
+  }
+
+  svg { position: absolute; inset: 0; overflow: visible; }
+
+  .ring-outer { animation: spin 40s linear infinite; transform-origin: center; }
+  .ring-mid   { animation: spin 26s linear infinite reverse; transform-origin: center; }
+  .ring-ticks { animation: spin 90s linear infinite; transform-origin: center; }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  .sweep-arc {
+    stroke: var(--amber);
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 6px var(--amber));
+    animation: sweep 5s ease-in-out infinite;
+  }
+
+  @keyframes sweep {
+    0%   { stroke-dashoffset: 0; opacity: 1; }
+    50%  { stroke-dashoffset: -180; opacity: 0.6; }
+    100% { stroke-dashoffset: -360; opacity: 1; }
+  }
+
+  .pulse-dot { animation: blink 2.4s ease-in-out infinite; }
+  .pulse-dot:nth-child(2) { animation-delay: 0.3s; }
+  .pulse-dot:nth-child(3) { animation-delay: 0.6s; }
+  .pulse-dot:nth-child(4) { animation-delay: 0.9s; }
+  .pulse-dot:nth-child(5) { animation-delay: 1.2s; }
+
+  @keyframes blink {
+    0%, 100% { opacity: 0.25; }
+    50% { opacity: 1; }
+  }
+
+  .core {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .name {
+    font-size: clamp(28px, 6vmin, 52px);
+    letter-spacing: 0.4em;
+    color: var(--cyan-bright);
+    text-shadow: 0 0 14px rgba(79, 216, 236, 0.7), 0 0 40px rgba(79, 216, 236, 0.3);
+    font-weight: bold;
+    margin: 0;
+  }
+
+  .status {
+    margin-top: 14px;
+    font-size: clamp(11px, 1.6vmin, 14px);
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    min-height: 1.4em;
+  }
+
+  .status .word {
+    color: var(--cyan);
+    text-shadow: 0 0 8px rgba(79, 216, 236, 0.6);
+  }
+
+  .status .caret {
+    display: inline-block;
+    width: 7px;
+    height: 1em;
+    background: var(--cyan);
+    margin-left: 4px;
+    vertical-align: -2px;
+    animation: caret-blink 1s step-end infinite;
+  }
+
+  @keyframes caret-blink {
+    50% { opacity: 0; }
+  }
+
+  .readout {
+    position: absolute;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    opacity: 0.55;
+  }
+
+  .readout.tl { top: 6%; left: 4%; text-align: left; }
+  .readout.br { bottom: 6%; right: 4%; text-align: right; }
+
+  .readout div { margin: 2px 0; }
+  .readout .val { color: var(--cyan); opacity: 0.9; }
+
+  .app {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .mic-btn {
+    position: absolute;
+    bottom: -56px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 1px solid var(--cyan-dim);
+    background: rgba(10, 30, 38, 0.8);
+    color: var(--cyan);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: box-shadow 0.2s, border-color 0.2s;
+  }
+
+  .mic-btn:hover {
+    border-color: var(--cyan);
+  }
+
+  .mic-btn.active {
+    border-color: var(--amber);
+    color: var(--amber);
+    box-shadow: 0 0 18px rgba(255, 181, 69, 0.6);
+    animation: mic-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes mic-pulse {
+    0%, 100% { box-shadow: 0 0 10px rgba(255, 181, 69, 0.4); }
+    50% { box-shadow: 0 0 26px rgba(255, 181, 69, 0.8); }
+  }
+
+  .mic-btn svg { width: 22px; height: 22px; }
+
+  .feed {
+    margin-top: 76px;
+    width: min(90vw, 480px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    text-align: center;
+  }
+
+  .transcript {
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    min-height: 1.4em;
+  }
+
+  .transcript .live {
+    color: var(--cyan-bright);
+  }
+
+  .reply {
+    font-size: 13px;
+    line-height: 1.5;
+    letter-spacing: 0.02em;
+    color: var(--cyan-bright);
+    min-height: 1.4em;
+  }
+
+  .unsupported {
+    font-size: 11px;
+    color: #d97757;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="grid"></div>
+<div class="scanline"></div>
+
+<div class="app">
+<div class="stage">
+  <svg viewBox="-160 -160 320 320" width="100%" height="100%">
+    <!-- outer segmented ring -->
+    <g class="ring-outer">
+      <circle r="148" fill="none" stroke="var(--cyan-dim)" stroke-width="2" stroke-dasharray="1 7" />
+      <circle r="140" fill="none" stroke="var(--cyan)" stroke-width="1.4" opacity="0.5"
+        stroke-dasharray="60 6 20 6 90 6 40 6" />
+    </g>
+
+    <!-- amber sweep -->
+    <circle class="sweep-arc" r="140" fill="none" stroke-width="3"
+      stroke-dasharray="90 630" />
+
+    <!-- mid ring with ticks -->
+    <g class="ring-ticks">
+      <circle r="118" fill="none" stroke="var(--cyan-dim)" stroke-width="1" />
+      <g stroke="var(--cyan)" stroke-width="1.2" opacity="0.7">
+        <!-- 48 tick marks -->
+        <g id="ticks"></g>
+      </g>
+    </g>
+
+    <!-- inner ring -->
+    <g class="ring-mid">
+      <circle r="92" fill="none" stroke="var(--cyan)" stroke-width="1.5" opacity="0.6"
+        stroke-dasharray="4 4" />
+    </g>
+
+    <!-- status pulse dots along inner arc -->
+    <g transform="rotate(-40)">
+      <circle class="pulse-dot" cx="0" cy="-104" r="2.4" fill="var(--amber)" />
+      <circle class="pulse-dot" cx="27" cy="-101" r="2.4" fill="var(--amber)" />
+      <circle class="pulse-dot" cx="53" cy="-91" r="2.4" fill="var(--amber)" />
+      <circle class="pulse-dot" cx="76" cy="-75" r="2.4" fill="var(--amber)" />
+      <circle class="pulse-dot" cx="95" cy="-53" r="2.4" fill="var(--amber)" />
+    </g>
+
+    <!-- core disc -->
+    <circle r="70" fill="rgba(5, 20, 26, 0.6)" stroke="var(--cyan)" stroke-width="1" opacity="0.9" />
+  </svg>
+
+  <div class="core">
+    <div class="name">JARVIS</div>
+    <div class="status"><span class="word" id="statusWord">Listening</span><span class="caret"></span></div>
+  </div>
+
+  <div class="readout tl">
+    <div>SYS &nbsp;<span class="val">ONLINE</span></div>
+    <div>PWR &nbsp;<span class="val">98.4%</span></div>
+    <div>LAT &nbsp;<span class="val">12ms</span></div>
+  </div>
+  <div class="readout br">
+    <div>UPLINK &nbsp;<span class="val" id="clock">--:--:--</span></div>
+    <div>SESSION &nbsp;<span class="val">#0417</span></div>
+  </div>
+
+  <button class="mic-btn" id="micBtn" aria-label="Toggle voice input" aria-pressed="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <rect x="9" y="2" width="6" height="12" rx="3" />
+      <path d="M5 10v1a7 7 0 0 0 14 0v-1" />
+      <line x1="12" y1="18" x2="12" y2="22" />
+      <line x1="8" y1="22" x2="16" y2="22" />
+    </svg>
+  </button>
+</div>
+
+<div class="feed">
+  <div class="transcript" id="transcript"></div>
+  <div class="reply" id="replyText"></div>
+  <div class="unsupported" id="unsupported">Voice input isn't supported in this browser — try Chrome or Edge.</div>
+</div>
+</div>
+
+<script>
+  // generate 48 tick marks around the ring
+  const ticksGroup = document.getElementById('ticks');
+  const count = 48;
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * 360;
+    const isMajor = i % 4 === 0;
+    const r1 = 118;
+    const r2 = isMajor ? 108 : 113;
+    const rad = (angle * Math.PI) / 180;
+    const x1 = r1 * Math.sin(rad), y1 = -r1 * Math.cos(rad);
+    const x2 = r2 * Math.sin(rad), y2 = -r2 * Math.cos(rad);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', x1.toFixed(2));
+    line.setAttribute('y1', y1.toFixed(2));
+    line.setAttribute('x2', x2.toFixed(2));
+    line.setAttribute('y2', y2.toFixed(2));
+    line.setAttribute('stroke-width', isMajor ? 1.6 : 0.8);
+    ticksGroup.appendChild(line);
+  }
+
+  // status text is driven by real mic state below (set to Idle by default)
+  const statusEl = document.getElementById('statusWord');
+  function setStatus(word) {
+    statusEl.textContent = word;
+  }
+  setStatus('Idle');
+
+  // --- Voice input (Web Speech API) ---
+  const micBtn = document.getElementById('micBtn');
+  const transcriptEl = document.getElementById('transcript');
+  const replyEl = document.getElementById('replyText');
+  const unsupportedEl = document.getElementById('unsupported');
+
+  function sendToJarvis(message) {
+    replyEl.textContent = '';
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) {
+          setStatus('Idle');
+          replyEl.textContent = `Error: ${data.error}`;
+          return;
+        }
+        replyEl.textContent = data.reply;
+        if (data.audio_url) {
+          setStatus('Speaking');
+          const audio = new Audio(data.audio_url);
+          audio.onended = () => setStatus('Idle');
+          audio.onerror = () => setStatus('Idle');
+          audio.play();
+        } else {
+          setStatus('Idle');
+        }
+      })
+      .catch((err) => {
+        setStatus('Idle');
+        replyEl.textContent = `Couldn't reach Jarvis: ${err.message}`;
+      });
+  }
+
+  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognitionImpl) {
+    micBtn.disabled = true;
+    micBtn.style.opacity = 0.35;
+    unsupportedEl.style.display = 'block';
+  } else {
+    const recognition = new SpeechRecognitionImpl();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    let listening = false;
+
+    recognition.onstart = () => {
+      listening = true;
+      micBtn.classList.add('active');
+      micBtn.setAttribute('aria-pressed', 'true');
+      setStatus('Listening');
+      transcriptEl.innerHTML = '';
+    };
+
+    recognition.onresult = (event) => {
+      let finalText = '';
+      let interimText = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const chunk = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalText += chunk;
+        } else {
+          interimText += chunk;
+        }
+      }
+      transcriptEl.innerHTML = finalText
+        ? `${finalText}<span class="live">${interimText}</span>`
+        : `<span class="live">${interimText}</span>`;
+
+      if (finalText.trim()) {
+        setStatus('Thinking');
+        sendToJarvis(finalText.trim());
+      }
+    };
+
+    recognition.onerror = (event) => {
+      setStatus('Idle');
+      let message = `Mic error: ${event.error}`;
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        const isSecure = window.isSecureContext;
+        message = isSecure
+          ? 'Mic blocked — click the icon in your address bar (or check chrome://settings/content/microphone) and allow access for this site.'
+          : 'Mic blocked — this page must be served over http://localhost or https://, not opened as a local file. See the instructions below the interface.';
+      } else if (event.error === 'no-speech') {
+        message = 'No speech detected — try again.';
+      } else if (event.error === 'audio-capture') {
+        message = 'No microphone found — check it\'s connected and not in use by another app.';
+      }
+      transcriptEl.textContent = message;
+    };
+
+    recognition.onend = () => {
+      listening = false;
+      micBtn.classList.remove('active');
+      micBtn.setAttribute('aria-pressed', 'false');
+      if (statusEl.textContent === 'Listening') setStatus('Idle');
+    };
+
+    micBtn.addEventListener('click', () => {
+      if (listening) {
+        recognition.stop();
+      } else {
+        recognition.start();
+      }
+    });
+  }
+
+  // live clock in the corner readout
+  const clockEl = document.getElementById('clock');
+  function tick() {
+    const now = new Date();
+    clockEl.textContent = now.toTimeString().split(' ')[0];
+  }
+  tick();
+  setInterval(tick, 1000);
+</script>
+
+</body>
+</html>
